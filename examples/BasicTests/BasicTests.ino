@@ -34,9 +34,9 @@ void parseNdefTable(struct ndefMessage *msg)
     // Calculate offset for fixed fields in the header
     offset += 3;                 // Includes offset for type length, payload length (SR) and record type
     // Calculate offset for given length descriptors
-    offset += msg->d.data[1];    // Type length offset
-    offset += msg->d.data[2];    // Payload length (Only SR records supported)
-    pl_length = msg->d.data[2];
+    offset += msg->d.data[NDEF_FLD_TYPE_LENGTH];       // Type length offset
+    offset += msg->d.data[NDEF_FLD_PAYLOAD_LENGTH];    // Payload length (Only SR records supported)
+    pl_length = msg->d.data[NDEF_FLD_PAYLOAD_LENGTH];
 
     num_entries++;
 
@@ -44,7 +44,7 @@ void parseNdefTable(struct ndefMessage *msg)
     if (msg->d.tnf & NDEF_TNF_IL) {
       Serial.println(F("ID field present !"));
       offset += 1; // For the ID length field
-      offset += msg->d.data[3];  // Add in the length descriptor
+      offset += msg->d.data[3];  // Add in the ID field length descriptor
     }
     
     Serial.print(F("Offset is: "));
@@ -61,9 +61,10 @@ void parseNdefTable(struct ndefMessage *msg)
   Serial.println(num_entries);
 }
 
+unsigned char newBuf[256];
 void setup()
 {
-  size_t length;
+  uint16_t length;
   struct cc_file_layout *ccfl;
   struct system_file *sf;
   
@@ -76,6 +77,7 @@ void setup()
   /* Initialize the m24sr library */
   m24sr.begin(GPO_PIN);
   
+  /* Set GPO mode */
   m24sr.writeGPO(1);
   
   Serial.println(F("CC file content:"));
@@ -132,7 +134,9 @@ void setup()
   Serial.println(sf->product_code, HEX);
   
 #if 1
-//  msg = (char *)m24sr.getNdefMessage(&length);
+//  m24sr.clearTag();
+//  Serial.println(F("Tag Cleared!"));
+  
   struct m24srNdefMessage* m24sr_ndef = m24sr.getNdefMessage(&length);
   msg = (char *)m24sr_ndef;
   Serial.print(F("NDEF message length: "));
@@ -140,35 +144,35 @@ void setup()
 
   Serial.print(F("MB: "));
   if (m24sr_ndef->msg.d.tnf & NDEF_TNF_MB)
-    Serial.println("1");
+    Serial.print("1");
   else
-    Serial.println("0");
+    Serial.print("0");
   
-  Serial.print(F("ME: "));
+  Serial.print(F(", ME: "));
   if (m24sr_ndef->msg.d.tnf & NDEF_TNF_ME)
-    Serial.println("1");
+    Serial.print("1");
   else
-    Serial.println("0");
+    Serial.print("0");
   
-  Serial.print(F("CF: "));
+  Serial.print(F(", CF: "));
   if (m24sr_ndef->msg.d.tnf & NDEF_TNF_CF)
-    Serial.println("1");
+    Serial.print("1");
   else
-    Serial.println("0");
+    Serial.print("0");
 
-  Serial.print(F("SR: "));
+  Serial.print(F(", SR: "));
   if (m24sr_ndef->msg.d.tnf & NDEF_TNF_SR)
-    Serial.println("1");
+    Serial.print("1");
   else
-    Serial.println("0");
+    Serial.print("0");
     
-  Serial.print(F("IL: "));
+  Serial.print(F(", IL: "));
   if (m24sr_ndef->msg.d.tnf & NDEF_TNF_IL)
-    Serial.println("1");
+    Serial.print("1");
   else
-    Serial.println("0");
+    Serial.print("0");
     
-  Serial.print(F("TNF: "));
+  Serial.print(F(", TNF: "));
   Serial.println(m24sr_ndef->msg.d.tnf & NDEF_TNF_MASK);
 
   Serial.print(F("NDEF message length: "));
@@ -192,7 +196,17 @@ void setup()
   parseNdefTable(&m24sr_ndef->msg);
   
   // Write the message back
-  m24sr.writeNdefMessage(m24sr_ndef, length);
+  // Since the current NDEF msg is in the M24SR library working buffer
+  // We need to copy it to a new area.
+  memcpy(newBuf, msg, length);
+  struct m24srNdefMessage *newMsg = (struct m24srNdefMessage *)newBuf;
+  // Then we can write the content back to the tag EEPROM.
+  m24sr.writeNdefMessage(&(newMsg->msg), (uint8_t)length);
+
+  // Get and parse again to see the newly written data.... 
+  // which should be the same as the old
+  m24sr_ndef = m24sr.getNdefMessage(&length);
+  parseNdefTable(&m24sr_ndef->msg);
   
 #endif
 }

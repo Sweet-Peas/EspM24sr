@@ -19,6 +19,7 @@
 #include <EspM24sr.h>
 #include <Wire.h>
 
+// Set this flag to 1 if you need to debug the library
 #define DEBUG 0
 
 #define DEVICE_ADDRESS        0x56
@@ -52,6 +53,11 @@ EspM24SR::~EspM24SR(void)
 
 }
 
+void EspM24SR::begin()
+{
+  Wire.begin();
+}
+
 void EspM24SR::begin(int pin)
 {
 #if DEBUG
@@ -64,7 +70,7 @@ void EspM24SR::begin(int pin)
 #if DEBUG
   Serial.println (F("Initializing the I2C interface !"));
 #endif
-  Wire.begin();
+  begin();
 }
 
 void EspM24SR::updateCrc (uint8_t ch, uint16_t *lpwCrc)
@@ -178,17 +184,18 @@ int EspM24SR::receiveResponse(uint16_t offset, uint16_t len)
     }
 
     if (WTX) {
-      Serial.println(F("WTX"));
-      delay(200 * response[0]);
-      //send WTX response
-      //sendSBLOCK(0xF2);
-          m24buf[0] = 0xF2;//WTX
-          m24buf[1] = response[0];
-          sendCommand(2, false);
-          loop = true;
-          index = 0;
-        }
-      } while(loop);
+#if DEBUG
+      Serial.print(F("WTX: "));
+      Serial.println(response[0]);
+#endif
+      m24buf[0] = 0xF2; //WTX response
+      m24buf[1] = response[0];
+      sendCommand(2, false);
+      loop = true;
+      index = 0;
+      delay(100 * response[0]);
+    }
+  } while(loop);
 
   return index;
 }
@@ -396,6 +403,7 @@ struct m24srNdefMessage* EspM24SR::getNdefMessage(size_t *length)
   Serial.println(F("getNdefMessage()"));
 #endif
 
+  memset(response, 0xaa, sizeof response);
   selectFile_NDEF_App();
   selectFile_NDEF_file();
 
@@ -421,8 +429,10 @@ struct m24srNdefMessage* EspM24SR::getNdefMessage(size_t *length)
   }
 
   // Read the remaining data
-  sendApdu(0x00, INS_READ_BINARY, 0x00, (uint8_t)offset, remCnt);
-  receiveResponse(offset, remCnt + 7);
+  if (remCnt) {
+    sendApdu(0x00, INS_READ_BINARY, 0x00, (uint8_t)offset, remCnt);
+    receiveResponse(offset, remCnt + 7);
+  }
   // TODO: Do some error checking here
 
   // Temporarily store the first bytes, sendDESELECT will destroy it
@@ -431,58 +441,66 @@ struct m24srNdefMessage* EspM24SR::getNdefMessage(size_t *length)
 
   sendDESELECT();
 
-  // Restore length
+  // Restore length in little endian order.
   response[0] = len[1];
   response[1] = len[0];
 
   return (struct m24srNdefMessage *)&response[0];
 }
 
+#if defined(ESPM24SR_ENABLE_WRITE)
+
 void EspM24SR::updateBinaryLen(int len) {
 #if DEBUG
-        Serial.println(F("\r\nupdateBinaryLen"));
+  Serial.println(F("\r\nupdateBinaryLen"));
 #endif
-    uint8_t len_bytes[] = "\x00\x00";
+    uint8_t len_bytes[2];
     len_bytes[0] = (len >> 8) & 0xff;
     len_bytes[1] = (len & 0xff);
     sendApdu(0x00, INS_UPDATE_BINARY, 0x00, 0x00, 0x02, len_bytes);
+    receiveResponse(0, 2 + 3);
 }
 
-void EspM24SR::updateBinary_NdefMsgLen0() {
+void EspM24SR::updateBinary(uint8_t *buf, uint8_t len) {
 #if DEBUG
-  Serial.print(F("\r\nupdateBinary_NdefMsgLen0"));
+  Serial.println(F("updateBinary"));
 #endif
 
-  uint8_t len0[] = "\x00\x00";
-  sendApdu(0x00, INS_UPDATE_BINARY, 0x00, 0x00, 0x02, len0);
-  receiveResponse(0, 2 + 3);
-}
+  // Arduino Wire library only supports transmitting 32 bytes in one
+  // transaction. Here we calculate the number of chunks we need
+  // to split the data into.
+  int cnt = len / (BUFFER_LENGTH - 8);
+  int remCnt = len - (cnt * (BUFFER_LENGTH - 8));
+  int offset = 2;
 
-void EspM24SR::updateBinary(char* Data, uint8_t len) {
 #if DEBUG
-  Serial.println(F("\r\nupdateBinary"));
+  Serial.print(F("Cnt = "));
+  Serial.print(cnt);
+  Serial.print(F(", remCnt = "));
+  Serial.println(remCnt);
 #endif
 
-  uint8_t pos = 0;
+  while(cnt--) {
+    sendApdu(0x00, INS_UPDATE_BINARY, (offset >> 8) & 0xff, offset & 0xff,
+        BUFFER_LENGTH, buf);
+    receiveResponse(0, 2 + 3);
+    offset += (BUFFER_LENGTH - 8);
+    buf += (BUFFER_LENGTH - 8);
+  }
 
-  while(pos < len) {
-    uint8_t chunk_len = (len - pos);
-    if (chunk_len > (BUFFER_LENGTH - 8))
-      chunk_len = BUFFER_LENGTH - 8;
+#if DEBUG
+  Serial.print(F("Offset = "));
+  Serial.println(offset);
+#endif
 
-    Serial.print(F("\r\nchunk_len:"));
-    Serial.print(chunk_len, DEC);
-    Serial.print(F(", pos:"));
-    Serial.print(pos, DEC);
-    sendApdu(0x00, INS_UPDATE_BINARY, ((pos+2) >> 8) & 0xff,
-        (pos+2) & 0xff, chunk_len, (uint8_t*)&Data[pos]);
-    pos += chunk_len;
-    if (pos < len)
-      receiveResponse(0, 2 + 3);
+  if (remCnt) {
+    sendApdu(0x00, INS_UPDATE_BINARY, (offset >> 8) & 0xff, offset & 0xff,
+        remCnt, buf);
+    receiveResponse(0, 2 + 3);
   }
 }
 
-int EspM24SR::writeNdefMessage(struct m24srNdefMessage *msg, uint8_t len)
+int EspM24SR::writeNdefMessage(struct ndefMessage *msg, uint8_t len)
 {
   if (!msg) {
     return M24SR_PARAMETER_ERROR;
@@ -491,15 +509,29 @@ int EspM24SR::writeNdefMessage(struct m24srNdefMessage *msg, uint8_t len)
   selectFile_NDEF_App();
   selectFile_NDEF_file();
 
-  updateBinary_NdefMsgLen0();
-  updateBinary((char*)msg, len);
-  receiveResponse(0, 2 + 3);
+  updateBinary((uint8_t *)msg, len);
+  updateBinaryLen(len - 2);
 
-  updateBinaryLen(len);
-  receiveResponse(0, 2 + 3);
   sendDESELECT();
 
   return 0;
 }
+
+void EspM24SR::clearTag(void)
+{
+#if DEBUG
+  Serial.print(F("clearTag"));
+#endif
+  uint8_t len0[] = "\x00\x03\xD0\x00\x00";
+
+  selectFile_NDEF_App();
+  selectFile_NDEF_file();
+
+  sendApdu(0x00, INS_UPDATE_BINARY, 0x00, 0x00, 0x05, len0);
+  receiveResponse(0, 2 + 3);
+
+  sendDESELECT();
+}
+#endif
 
 /* EOF */
