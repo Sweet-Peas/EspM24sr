@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <esp-m24sr.h>
+#include <EspM24sr.h>
 
 #define GPO_PIN    3
 #define LED        13
@@ -74,7 +74,7 @@ void setup()
   digitalWrite(LED, LOW);
 
   /* Initialize the m24sr library */
-  m24sr.init(GPO_PIN);
+  m24sr.begin(GPO_PIN);
   
   m24sr.writeGPO(1);
   
