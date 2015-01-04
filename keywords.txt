@@ -1,0 +1,31 @@
+#######################################
+# Syntax Coloring Map For ESP-M24SR
+####################################### 
+# Class
+#######################################
+
+EspM24SR	        KEYWORD3
+
+#######################################
+# Methods and Functions 
+#######################################	
+
+begin               KEYWORD2
+getCCFile          	KEYWORD2
+getSystemFile   	KEYWORD2
+verifyI2cPassword	KEYWORD2
+writeGPO        	KEYWORD2
+getNdefMessage  	KEYWORD2
+writeNdefMessage   	KEYWORD2
+
+#######################################
+# Constants
+#######################################
+ 
+NDEF_TNF_MB     	LITERAL1
+NDEF_TNF_ME         LITERAL1
+NDEF_TNF_CF         LITERAL1
+NDEF_TNF_SR         LITERAL1
+NDEF_TNF_IL         LITERAL1
+NDEF_TNF_MASK       LITERAL1
+

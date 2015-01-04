@@ -73,14 +73,9 @@ class EspM24SR
       EspM24SR();
       ~EspM24SR();
 
-      void init(int pin);
-      void selectFile_NDEF_App();
-      void selectFile_NDEF_file();
-      void selectFile_CC_file();
+      void begin(int pin);
       struct cc_file_layout* getCCFile();
       struct system_file*  getSystemFile();
-      void sendSBLOCK(byte sblock);
-      void sendDESELECT();
       M24SR_return_code_t verifyI2cPassword();
       void writeGPO(uint8_t value);
 
@@ -93,6 +88,11 @@ class EspM24SR
       uint8_t block_num;
 
     private:
+      void sendSBLOCK(byte sblock);
+      void sendDESELECT();
+      void selectFile_CC_file();
+      void selectFile_NDEF_App();
+      void selectFile_NDEF_file();
       void updateBinaryLen(int len);
       void updateBinary_NdefMsgLen0();
       void updateBinary(char* Data, uint8_t len);

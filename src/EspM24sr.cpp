@@ -16,7 +16,7 @@
  */
 
 #include <Arduino.h>
-#include <esp-m24sr.h>
+#include <EspM24sr.h>
 #include <Wire.h>
 
 #define DEBUG 0
@@ -52,7 +52,7 @@ EspM24SR::~EspM24SR(void)
 
 }
 
-void EspM24SR::init(int pin)
+void EspM24SR::begin(int pin)
 {
 #if DEBUG
   Serial.print(F("Initializing Arduino GPO input pin "));
