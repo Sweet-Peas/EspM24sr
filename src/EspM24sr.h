@@ -99,6 +99,28 @@ struct m24srNdefMessage {
 #define NDEF_TNF_IL       0x08
 #define NDEF_TNF_MASK     0x07
 
+/**
+ * The EspM24SR class includes the basic functionality needed to be
+ * able to read and write to a M24SR dual port memory. It was designed
+ * to be as small as possible but still have the required functionality
+ * to be able to read and write NDEF records.
+ *
+ * It does not (yet) include any functionality to manage passwords
+ * or any of the advanced security features that is found in the
+ * device itself.
+ *
+ * Example:
+ *\code{.cpp}
+ * EspM24SR m24sr;
+ *
+ * struct m24srNdefMessage *msg;
+ * size_t length;
+ *
+ * m24sr.begin();
+ * msg = m24sr.getNdefMessage(&length);
+ *
+ *\endcode
+ */
 class EspM24SR
 {
     public:
@@ -144,6 +166,8 @@ class EspM24SR
 
       /**
        * Sets the required operating mode of the GPO pin.
+       * Make sure you consult the datasheet to get the operating
+       * mode that you are after.
        */
       void writeGPO(uint8_t value);
 

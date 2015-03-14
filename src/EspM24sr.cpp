@@ -295,10 +295,9 @@ void EspM24SR::writeGPO(uint8_t value)
   Serial.println(F("writeGPO"));
 #endif
 
-  if (!verifyI2cPassword() != M24SR_OPERATION_OK) {
+  if (verifyI2cPassword() != M24SR_OPERATION_OK) {
     return;
   }
-
   sendApdu_P(0x00, INS_SELECT_FILE, 0x00, 0x0C, 0x02, FILE_SYSTEM);
   receiveResponse(0, 2 + 3);
 
